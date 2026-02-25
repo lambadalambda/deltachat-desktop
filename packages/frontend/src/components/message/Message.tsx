@@ -505,7 +505,8 @@ export default function Message(props: {
         })
       }
 
-      // the event.t is a workaround for labled links, as they will be able to contain markdown formatting in the label in the future.
+      // event.t is set by `Link` for markdown links with formatted labels,
+      // so context menus still receive the anchor as click target.
       const target = ((event as any).t || event.target) as HTMLAnchorElement
       const items = buildContextMenu(
         {

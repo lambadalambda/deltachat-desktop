@@ -96,7 +96,7 @@ function MessageBody({
   }
   return parseAndRenderMessage(
     textTrimmed,
-    nonInteractiveContent,
+    nonInteractiveContent ? 'non_interactive' : 'interactive',
     tabindexForInteractiveContents ?? 0
   )
 }

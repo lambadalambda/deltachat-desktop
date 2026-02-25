@@ -134,6 +134,26 @@ $info-text-max-width: 400px;
         cursor: default;
 
         margin-inline-end: 10px;
+
+        .mm-code {
+          white-space: pre-wrap;
+          display: block;
+          padding: 6px;
+          border-radius: 8px;
+          margin: 4px 0;
+          overflow-x: auto;
+
+          > span {
+            display: block;
+            font-size: 0.82em;
+            opacity: 0.85;
+            margin-bottom: 4px;
+          }
+        }
+
+        .mm-inline-code {
+          white-space: break-spaces;
+        }
       }
     }
 

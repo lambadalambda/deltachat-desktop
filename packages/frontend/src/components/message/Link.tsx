@@ -23,7 +23,7 @@ type PunycodeWarning = {
   ascii_hostname: string
   punycode_encoded_url: string
 }
-type LinkDestination = {
+export type LinkDestination = {
   target: string
   hostname: null | string
   punycode: null | PunycodeWarning
@@ -34,9 +34,11 @@ type LinkDestination = {
 export const Link = ({
   destination,
   tabIndex,
+  children,
 }: {
   destination: LinkDestination
   tabIndex: -1 | 0
+  children?: React.ReactNode
 }) => {
   const { openDialog } = useDialog()
   const openLinkSafely = useOpenLinkSafely()
@@ -74,9 +76,17 @@ export const Link = ({
       x-target-url={asciiUrl}
       title={asciiUrl}
       onClick={onClick}
+      onContextMenu={
+        children
+          ? (event: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => {
+              const targetWithHack = event as { t?: EventTarget | null }
+              targetWithHack.t = event.currentTarget
+            }
+          : undefined
+      }
       tabIndex={tabIndex}
     >
-      {linkText ?? target}
+      {children ?? linkText ?? target}
     </a>
   )
 }

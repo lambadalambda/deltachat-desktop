@@ -6,6 +6,9 @@ import '../../utils/linkify/plugin-bot-command/index.js'
 
 import { Link } from './Link.js'
 import { parseElements } from '../../utils/linkify/parseElements.js'
+import type { LinkDestination } from './Link.js'
+import { parseMarkdown } from '../../utils/markdown/parseMarkdown.js'
+import type { MessageMarkdownElement } from '../../utils/markdown/parseMarkdown.js'
 import { getLogger } from '@deltachat-desktop/shared/logger'
 import { ActionEmitter, KeybindAction } from '../../keybindings'
 import { BackendRemote } from '../../backend-com'
@@ -16,10 +19,12 @@ import useCreateChatByEmail from '../../hooks/chat/useCreateChatByEmail'
 
 const log = getLogger('renderer/message-parser')
 
-function renderElement(
+type ParseAndRenderMode = 'interactive' | 'non_interactive' | 'summary'
+
+function renderLinkifyElement(
   elm: linkify.MultiToken,
   tabindexForInteractiveContents: -1 | 0,
-  key?: number
+  key?: React.Key
 ): React.ReactElement {
   switch (elm.t) {
     case 'hashtag':
@@ -37,43 +42,10 @@ function renderElement(
      * It does only identify valid TLDs based on https://data.iana.org/TLD/tlds-alpha-by-domain.txt
      */
     case 'url': {
-      let fullUrl = elm.v
-      // no token for scheme?
-      if (!elm.tk.find(t => ['SLASH_SCHEME', 'SCHEME'].includes(t.t))) {
-        // no scheme so we add https as default
-        // be aware that custom protocols may not
-        // have a SLASH_SCHEME but just a SCHEME
-        // see https://github.com/nfrasser/linkifyjs/blob/3abe9abbcb4e069aeadde2f42de7dfcc2371c0f0/packages/linkifyjs/src/text.mjs#L24
-        fullUrl = 'https://' + fullUrl
-      }
-      const url = new URL(fullUrl)
-      let suspicousUrl = false
-      const stripLastSlash = (url: string) => {
-        if (url.endsWith('/')) {
-          url = url.slice(0, -1)
-        }
-        return url
-      }
-      // according to https://developer.mozilla.org/docs/Web/API/URL/hostname
-      // domain names will be transformed to punycode automatically
-      // so we just need to check if the original hostname is different
-      // from the punycode one
-      if (stripLastSlash(url.href) !== stripLastSlash(fullUrl)) {
-        suspicousUrl = true
-      }
-      const destination = {
-        target: fullUrl,
-        hostname: url.hostname,
-        punycode: suspicousUrl
-          ? {
-              ascii_hostname: url.hostname,
-              punycode_encoded_url: url.href,
-              original_hostname_or_full_url: elm.v,
-            }
-          : null,
-        scheme: url.protocol.replace(':', ''),
-        linkText: elm.v,
-      }
+      const hasScheme = elm.tk.some(t =>
+        ['SLASH_SCHEME', 'SCHEME'].includes(t.t)
+      )
+      const destination = createLinkDestination(elm.v, hasScheme, elm.v)
       return (
         <Link
           destination={destination}
@@ -118,32 +90,213 @@ function renderElement(
   }
 }
 
+function createLinkDestination(
+  rawTarget: string,
+  hasScheme: boolean,
+  linkText?: string
+): LinkDestination {
+  const fullTarget = hasScheme ? rawTarget : 'https://' + rawTarget
+  const normalizedUrl = new URL(fullTarget)
+  const suspiciousUrl =
+    stripLastSlash(normalizedUrl.href) !== stripLastSlash(fullTarget)
+
+  return {
+    target: fullTarget,
+    hostname: normalizedUrl.hostname,
+    punycode: suspiciousUrl
+      ? {
+          ascii_hostname: normalizedUrl.hostname,
+          punycode_encoded_url: normalizedUrl.href,
+          original_hostname_or_full_url: rawTarget,
+        }
+      : null,
+    scheme: normalizedUrl.protocol.replace(':', ''),
+    linkText,
+  }
+}
+
+function stripLastSlash(url: string): string {
+  if (!url.endsWith('/')) {
+    return url
+  }
+  return url.slice(0, -1)
+}
+
+function renderInteractiveText(
+  text: string,
+  tabindexForInteractiveContents: -1 | 0,
+  key: React.Key
+) {
+  const elements = parseElements(text)
+  return (
+    <React.Fragment key={key}>
+      {elements.map((element, index) =>
+        renderLinkifyElement(
+          element,
+          tabindexForInteractiveContents,
+          `${key as string}:${index}`
+        )
+      )}
+    </React.Fragment>
+  )
+}
+
+function renderMarkdownElement(
+  element: MessageMarkdownElement,
+  mode: Exclude<ParseAndRenderMode, 'summary'>,
+  tabindexForInteractiveContents: -1 | 0,
+  key: React.Key
+): React.ReactElement {
+  switch (element.t) {
+    case 'text':
+      return mode === 'interactive' ? (
+        renderInteractiveText(element.c, tabindexForInteractiveContents, key)
+      ) : (
+        <span key={key}>{element.c}</span>
+      )
+
+    case 'inline_code':
+      return (
+        <code className='mm-inline-code' key={key}>
+          {element.c}
+        </code>
+      )
+
+    case 'code_block':
+      if (mode === 'non_interactive') {
+        return (
+          <code className='mm-inline-code' key={key}>
+            {element.c.content}
+          </code>
+        )
+      }
+      return (
+        <code className='mm-code' key={key}>
+          {element.c.language && <span>{element.c.language}</span>}
+          {element.c.content}
+        </code>
+      )
+
+    case 'bold':
+      return (
+        <b key={key}>
+          {element.c.map((child, index) =>
+            renderMarkdownElement(
+              child,
+              mode,
+              tabindexForInteractiveContents,
+              `${key as string}:bold:${index}`
+            )
+          )}
+        </b>
+      )
+
+    case 'italic':
+      return (
+        <i key={key}>
+          {element.c.map((child, index) =>
+            renderMarkdownElement(
+              child,
+              mode,
+              tabindexForInteractiveContents,
+              `${key as string}:italic:${index}`
+            )
+          )}
+        </i>
+      )
+
+    case 'strike':
+      return (
+        <s key={key}>
+          {element.c.map((child, index) =>
+            renderMarkdownElement(
+              child,
+              mode,
+              tabindexForInteractiveContents,
+              `${key as string}:strike:${index}`
+            )
+          )}
+        </s>
+      )
+
+    case 'markdown_link': {
+      const label =
+        element.c.label.length > 0
+          ? element.c.label.map((child, index) =>
+              renderMarkdownElement(
+                child,
+                'non_interactive',
+                tabindexForInteractiveContents,
+                `${key as string}:label:${index}`
+              )
+            )
+          : [<span key={`${key as string}:label:fallback`}>{element.c.target}</span>]
+
+      if (mode === 'non_interactive') {
+        return <span key={key}>{label}</span>
+      }
+
+      const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(element.c.target)
+
+      let destination: LinkDestination
+      try {
+        destination = createLinkDestination(element.c.target, hasScheme)
+      } catch {
+        return <span key={key}>{label}</span>
+      }
+
+      return (
+        <Link
+          destination={destination}
+          key={key}
+          tabIndex={tabindexForInteractiveContents}
+        >
+          {label}
+        </Link>
+      )
+    }
+  }
+}
+
 /**
- * parse message text (for links and interactive elements)
+ * Parse message text (for links and markdown formatting)
  * and render as React elements
  *
- * @param preview - render in preview mode for ChatListItem summary
- * and for quoted messages, without interactive elements
- * (links can not be clicked etc.)
+ * @param mode
+ * - `summary`: render plain text summary for chat list
+ * - `non_interactive`: render markdown formatting without interactive links
+ * - `interactive`: render markdown formatting and interactive links
  */
 export function parseAndRenderMessage(
   message: string,
-  preview: boolean,
+  modeOrPreview: ParseAndRenderMode | boolean,
   /**
-   * Has no effect if `{@link preview} === true`, because there should be
-   * no interactive elements in the first place
+   * Has no effect if mode is `summary`.
    */
   tabindexForInteractiveContents: -1 | 0
 ): React.ReactElement {
-  if (preview) {
+  const mode: ParseAndRenderMode =
+    typeof modeOrPreview === 'boolean'
+      ? modeOrPreview
+        ? 'summary'
+        : 'interactive'
+      : modeOrPreview
+
+  if (mode === 'summary') {
     return <div className='truncated'>{message}</div>
   }
+
   try {
-    const elements = parseElements(message)
+    const elements = parseMarkdown(message)
     return (
       <>
         {elements.map((el, index) =>
-          renderElement(el, tabindexForInteractiveContents, index)
+          renderMarkdownElement(
+            el,
+            mode,
+            tabindexForInteractiveContents,
+            index
+          )
         )}
       </>
     )
