@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
-import { getLogger } from '../../../../shared/logger'
+import { getLogger } from '../../../../shared/logger.js'
 
 const log = getLogger('renderer/stores/chat/scheduler')
 
@@ -80,7 +80,7 @@ export class ChatStoreScheduler {
         return
       }
 
-      const effect = this.effectQueue.pop()
+      const effect = this.effectQueue.shift()
       if (!effect) {
         throw new Error(
           `Undefined effect in effect queue? This should not happen. Effect is: ${JSON.stringify(
@@ -124,7 +124,11 @@ export class ChatStoreScheduler {
         returnValue = await effect(...args)
       } catch (err) {
         log.error(`Error in queuedEffect ${effectName}:`, err)
-        unlockQueue()
+        if (this.effectQueue.length !== 0) {
+          this.tickRunQueuedEffect()
+        } else {
+          unlockQueue()
+        }
         return
       }
       if (this.effectQueue.length !== 0) {
@@ -183,7 +187,11 @@ export class ChatStoreScheduler {
           }`,
           err
         )
-        unlockQueue()
+        if (this.effectQueue.length !== 0) {
+          this.tickRunQueuedEffect()
+        } else {
+          unlockQueue()
+        }
         return
       }
       if (this.effectQueue.length !== 0) {
