@@ -11,6 +11,7 @@ import {
   switchToProfile,
   getUser,
   createChat,
+  selectChat,
 } from '../playwright-helper'
 
 /**
@@ -91,12 +92,7 @@ test('send image attachment', async () => {
   const userB = getUser(1, existingProfiles)
 
   await switchToProfile(page, userA.id)
-
-  // Open chat with userB
-  await page
-    .locator('.chat-list .chat-list-item')
-    .filter({ hasText: userB.name })
-    .click()
+  await selectChat(page, userB.name)
 
   const fileChooserPromise = page.waitForEvent('filechooser')
   // Open attachment menu and select image
@@ -247,4 +243,59 @@ test('send contact as vCard', async () => {
   await expect(page.getByRole('dialog')).toContainText(
     `Chat with ${userA.name}?`
   )
+})
+
+test('receive multiple image attachments in quick succession', async () => {
+  test.setTimeout(180_000)
+
+  const userA = getUser(0, existingProfiles)
+  const userB = getUser(1, existingProfiles)
+
+  await switchToProfile(page, userA.id)
+
+  // Open chat with userB
+  await page
+    .locator('.chat-list .chat-list-item')
+    .filter({ hasText: userB.name })
+    .click()
+
+  const burstCount = 6
+
+  // Send multiple attachments quickly one after another.
+  for (let i = 0; i < burstCount; i++) {
+    const fileChooserPromise = page.waitForEvent('filechooser')
+    await page.getByTestId('open-attachment-menu').click()
+    await page.getByRole('menuitem', { name: 'Image' }).click()
+
+    const fileChooser = await fileChooserPromise
+    await fileChooser.setFiles(imagePath)
+    await page.locator('button.send-button').click()
+  }
+
+  // Switch to receiver and verify all burst messages were delivered
+  // with their image attachments rendered.
+  await switchToProfile(page, userB.id)
+  await selectChat(page, userA.name)
+
+  const incomingImagesLocator = page.locator(
+    '.message.incoming .msg-body img.attachment-content'
+  )
+  const initialIncomingImageCount = await incomingImagesLocator.count()
+  await expect
+    .poll(() => incomingImagesLocator.count(), { timeout: 120_000 })
+    .toBeGreaterThanOrEqual(initialIncomingImageCount + burstCount)
+
+  // Basic liveness check: app should still update after the burst.
+  const followUpText = `burst-follow-up-${Date.now()}`
+  await page.locator('textarea.create-or-edit-message-input').fill(followUpText)
+  await page.locator('button.send-button').click()
+  await expect(
+    page.locator('.message.outgoing').filter({ hasText: followUpText })
+  ).toBeVisible()
+
+  await switchToProfile(page, userA.id)
+  await selectChat(page, userB.name)
+  await expect(
+    page.locator('.message.incoming').filter({ hasText: followUpText })
+  ).toBeVisible()
 })
