@@ -39,6 +39,7 @@
   }
 }
 
+.reactions:hover .alsoReactButton,
 .reactionItem:hover .alsoReactButton,
 .reactionItem:focus-within .alsoReactButton {
   opacity: 1;
@@ -85,5 +86,6 @@
   inset: 0;
   border: none;
   background: transparent;
-  z-index: 1;
+  pointer-events: none;
+  z-index: 0;
 }

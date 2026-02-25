@@ -84,7 +84,7 @@ export default function Reactions(props: Props) {
   }
 
   return (
-    <div className={styles.reactions}>
+    <div className={styles.reactions} onClick={handleClick}>
       {reactions.slice(0, visibleEmojis).map(({ emoji, isFromSelf, count }) => {
         return (
           <span className={styles.reactionItem} key={emoji}>
@@ -92,7 +92,6 @@ export default function Reactions(props: Props) {
               className={classNames(styles.emoji, {
                 [styles.isFromSelf]: isFromSelf,
               })}
-              onClick={handleClick}
             >
               {emoji}
               {count > 1 && <span className={styles.emojiCount}>{count}</span>}
@@ -116,10 +115,7 @@ export default function Reactions(props: Props) {
         )
       })}
       {reactions.length > visibleEmojis && (
-        <span
-          className={classNames(styles.emoji, styles.emojiCount)}
-          onClick={handleClick}
-        >
+        <span className={classNames(styles.emoji, styles.emojiCount)}>
           +{hiddenReactionsCount}
         </span>
       )}
