@@ -6,6 +6,12 @@
   top: 16px;
 }
 
+.reactionItem {
+  display: inline-block;
+  position: relative;
+  z-index: 2;
+}
+
 .emoji {
   background-color: var(--messageIncomingBg);
   border-radius: 24px;
@@ -33,6 +39,37 @@
   }
 }
 
+.reactionItem:hover .alsoReactButton,
+.reactionItem:focus-within .alsoReactButton {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.alsoReactButton {
+  align-items: center;
+  background-color: var(--bp4MenuBg);
+  border-radius: 50%;
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  color: var(--messageText);
+  cursor: pointer;
+  display: inline-flex;
+  height: 16px;
+  justify-content: center;
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
+  position: absolute;
+  inset-inline-end: -6px;
+  top: -6px;
+  transition: opacity 120ms ease-in-out;
+  width: 16px;
+  z-index: 3;
+}
+
+.alsoReactIcon {
+  background-color: currentColor;
+}
+
 .emojiCount {
   bottom: 1px;
   color: var(--messageText);
@@ -48,4 +85,5 @@
   inset: 0;
   border: none;
   background: transparent;
+  z-index: 1;
 }

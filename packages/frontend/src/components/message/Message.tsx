@@ -992,6 +992,8 @@ export default function Message(props: {
             >
               {message.reactions && (
                 <Reactions
+                  messageId={message.id}
+                  canSendReaction={showReactionsUi(message, chat)}
                   reactions={message.reactions}
                   tabindexForInteractiveContents={
                     tabindexForInteractiveContents

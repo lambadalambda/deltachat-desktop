@@ -5,6 +5,7 @@ import Icon from '../Icon'
 import { BackendRemote } from '../../backend-com'
 import { selectedAccountId } from '../../ScreenController'
 import EmojiPicker from '../EmojiPicker'
+import { buildReactionPayload } from '../Reactions/reactionHelpers'
 
 import styles from './styles.module.scss'
 
@@ -52,11 +53,11 @@ export default function ReactionsBar({
   const accountId = selectedAccountId()
 
   const toggleReaction = async (emoji: string) => {
-    if (emoji === myReaction) {
-      await BackendRemote.rpc.sendReaction(accountId, messageId, [])
-    } else {
-      await BackendRemote.rpc.sendReaction(accountId, messageId, [emoji])
-    }
+    await BackendRemote.rpc.sendReaction(
+      accountId,
+      messageId,
+      buildReactionPayload(myReaction, emoji, 'toggle')
+    )
 
     onClick()
   }
