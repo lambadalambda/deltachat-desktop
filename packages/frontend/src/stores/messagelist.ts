@@ -184,6 +184,8 @@ function getView<T>(items: T[], start: number, end: number): T[] {
 
 export class MessageListStore extends Store<MessageListState> {
   scheduler = new ChatStoreScheduler()
+  private incomingMessageRefreshQueued = false
+  private incomingMessageRefreshPending = false
 
   constructor(
     private readonly accountId: number,
@@ -198,6 +200,81 @@ export class MessageListStore extends Store<MessageListState> {
     const view = getView(this.state.messageListItems, start, end)
     // this.log.debug('get activeView', { end, start, view })
     return view
+  }
+
+  private queueIncomingMessageRefresh() {
+    this.incomingMessageRefreshPending = true
+    if (this.incomingMessageRefreshQueued) {
+      return
+    }
+
+    this.incomingMessageRefreshQueued = true
+    void this.effect.drainIncomingMessageRefresh()
+  }
+
+  private async refreshAfterIncomingMessages() {
+    const messageListItems = await BackendRemote.rpc.getMessageListItems(
+      this.accountId,
+      this.chatId,
+      false,
+      true
+    )
+    let indexEnd = -1
+    const last_item: Type.MessageListItem | undefined =
+      this.state.messageListItems[this.state.messageListItems.length - 1]
+
+    let indexStart =
+      last_item === undefined
+        ? -1
+        : messageListItems.findIndex(item => {
+            if (last_item.kind !== item.kind) {
+              return false
+            } else {
+              if (item.kind === 'message') {
+                return item.msg_id === (last_item as any).msg_id
+              } else {
+                return item.timestamp === (last_item as any).timestamp
+              }
+            }
+          })
+
+    // check if there is an intersection
+    if (indexStart !== -1 && messageListItems[indexStart + 1]) {
+      indexStart = indexStart + 1
+    }
+
+    // if index start is not the end set, then set the end to the end
+    if (indexStart !== messageListItems.length - 1) {
+      indexEnd = messageListItems.length - 1
+    } else {
+      indexEnd = indexStart
+    }
+
+    // Only add incoming messages if we could append them directly to messagePages without having a hole
+    if (
+      this.state.newestFetchedMessageListItemIndex !== -1 &&
+      indexStart !== this.state.newestFetchedMessageListItemIndex + 1
+    ) {
+      this.log.debug(
+        `onEventIncomingMessage: new incoming messages cannot added to state without having a hole (indexStart: ${indexStart}, newestFetchedMessageListItemIndex ${this.state.newestFetchedMessageListItemIndex}), returning`
+      )
+      this.reducer.setMessageListItems(messageListItems)
+      return
+    }
+
+    const newMessageCacheItems =
+      (await loadMessages(
+        this.accountId,
+        messageListItems,
+        indexStart,
+        indexEnd
+      ).catch(err => this.log.error('loadMessages failed', err))) || {}
+
+    this.reducer.fetchedIncomingMessages({
+      messageListItems,
+      newMessageCacheItems,
+      newestFetchedMessageIndex: indexEnd,
+    })
   }
 
   reducer = {
@@ -700,70 +777,25 @@ export class MessageListStore extends Store<MessageListState> {
       ),
       'refresh'
     ),
-    onEventIncomingMessage: this.scheduler.queuedEffect(async () => {
-      const messageListItems = await BackendRemote.rpc.getMessageListItems(
-        this.accountId,
-        this.chatId,
-        false,
-        true
-      )
-      let indexEnd = -1
-      const last_item: Type.MessageListItem | undefined =
-        this.state.messageListItems[this.state.messageListItems.length - 1]
-
-      let indexStart =
-        last_item === undefined
-          ? -1
-          : messageListItems.findIndex(item => {
-              if (last_item.kind !== item.kind) {
-                return false
-              } else {
-                if (item.kind === 'message') {
-                  return item.msg_id === (last_item as any).msg_id
-                } else {
-                  return item.timestamp === (last_item as any).timestamp
-                }
-              }
-            })
-
-      // check if there is an intersection
-      if (indexStart !== -1 && messageListItems[indexStart + 1]) {
-        indexStart = indexStart + 1
-      }
-
-      // if index start is not the end set, then set the end to the end
-      if (indexStart !== messageListItems.length - 1) {
-        indexEnd = messageListItems.length - 1
-      } else {
-        indexEnd = indexStart
-      }
-
-      // Only add incoming messages if we could append them directly to messagePages without having a hole
-      if (
-        this.state.newestFetchedMessageListItemIndex !== -1 &&
-        indexStart !== this.state.newestFetchedMessageListItemIndex + 1
-      ) {
-        this.log.debug(
-          `onEventIncomingMessage: new incoming messages cannot added to state without having a hole (indexStart: ${indexStart}, newestFetchedMessageListItemIndex ${this.state.newestFetchedMessageListItemIndex}), returning`
-        )
-        this.reducer.setMessageListItems(messageListItems)
-        return
-      }
-
-      const newMessageCacheItems =
-        (await loadMessages(
-          this.accountId,
-          messageListItems,
-          indexStart,
-          indexEnd
-        ).catch(err => this.log.error('loadMessages failed', err))) || {}
-
-      this.reducer.fetchedIncomingMessages({
-        messageListItems,
-        newMessageCacheItems,
-        newestFetchedMessageIndex: indexEnd,
-      })
-    }, 'onEventIncomingMessage'),
+    drainIncomingMessageRefresh: this.scheduler.queuedEffect(
+      async () => {
+        try {
+          do {
+            this.incomingMessageRefreshPending = false
+            await this.refreshAfterIncomingMessages()
+          } while (this.incomingMessageRefreshPending)
+        } finally {
+          this.incomingMessageRefreshQueued = false
+          if (this.incomingMessageRefreshPending) {
+            this.queueIncomingMessageRefresh()
+          }
+        }
+      },
+      'drainIncomingMessageRefresh'
+    ),
+    onEventIncomingMessage: () => {
+      this.queueIncomingMessageRefresh()
+    },
     onEventMessagesChanged: this.scheduler.queuedEffect(
       async (messageId: number) => {
         if (
