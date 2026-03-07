@@ -1,0 +1,73 @@
+[tasks.frontend-test-agent-progress]
+description = "Run frontend tests for agent progress messages"
+run = "COREPACK_ENABLE_STRICT=0 pnpm --filter=@deltachat-desktop/frontend test -- src/tests/agent_progress.test.ts"
+
+[tasks.desktop-build]
+description = "Build desktop target assets"
+run = "COREPACK_ENABLE_STRICT=0 pnpm --filter=@deltachat-desktop/target-electron build"
+
+[tasks.desktop-pack-mac-dir]
+description = "Package unsigned macOS app into dist"
+depends = ["desktop-build"]
+run = [
+  "COREPACK_ENABLE_STRICT=0 pnpm --filter=@deltachat-desktop/target-electron pack:generate_config",
+  "COREPACK_ENABLE_STRICT=0 pnpm --filter=@deltachat-desktop/target-electron pack:patch-node-modules",
+  "COREPACK_ENABLE_STRICT=0 pnpm --filter=@deltachat-desktop/target-electron exec electron-builder --config ./electron-builder.json5 --mac dir -c.mac.identity=null -c.mac.provisioningProfile=null",
+]
+
+[tasks.desktop-install-mac]
+description = "Copy packaged app into /Applications"
+depends = ["desktop-pack-mac-dir"]
+run = """
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "desktop-install-mac is macOS-only" >&2
+  exit 1
+fi
+
+source_app=""
+for candidate in \
+  "packages/target-electron/dist/mac-arm64/DeltaChat.app" \
+  "packages/target-electron/dist/mac-x64/DeltaChat.app" \
+  "packages/target-electron/dist/mac/DeltaChat.app"
+do
+  if [ -d "$candidate" ]; then
+    source_app="$candidate"
+    break
+  fi
+done
+
+if [ -z "$source_app" ]; then
+  echo "No packaged app found in packages/target-electron/dist" >&2
+  exit 1
+fi
+
+ditto "$source_app" "/Applications/DeltaChat.app"
+"""
+
+[tasks.desktop-sign-mac]
+description = "Ad-hoc sign installed app and verify signature"
+depends = ["desktop-install-mac"]
+run = """
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "desktop-sign-mac is macOS-only" >&2
+  exit 1
+fi
+
+if [ ! -d "/Applications/DeltaChat.app" ]; then
+  echo "Missing /Applications/DeltaChat.app" >&2
+  exit 1
+fi
+
+codesign --force --deep --sign - --timestamp=none "/Applications/DeltaChat.app"
+codesign --verify --deep --strict --verbose=2 "/Applications/DeltaChat.app"
+"""
+
+[tasks.desktop-open-mac]
+description = "Launch DeltaChat from /Applications"
+depends = ["desktop-sign-mac"]
+run = "open -a \"/Applications/DeltaChat.app\""
+
+[tasks.desktop-build-install-mac]
+description = "Build, package, install, sign and open DeltaChat"
+depends = ["desktop-open-mac"]
+run = "echo \"DeltaChat refreshed in /Applications\""

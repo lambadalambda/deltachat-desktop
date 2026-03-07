@@ -160,6 +160,12 @@ $ pnpm -w build:electron
 $ pnpm -w start:electron
 ```
 
+With `mise`, the same local macOS build/install flow can be run with:
+
+```sh
+$ mise run desktop-build-install-mac
+```
+
 > `-w` means workspace root package, with this you don't need to have your current working directory at the repo-root to run those scripts.
 
 For development with local `deltachat core` read [`docs/UPDATE_CORE.md`](docs/UPDATE_CORE.md).
