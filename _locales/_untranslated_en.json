@@ -97,5 +97,26 @@
   },
   "message_selected_shortcut_section": {
     "message": "Selected Message"
+  },
+  "agent_progress_show_calls": {
+    "message": "Calls (%1$s)"
+  },
+  "agent_progress_hide_calls": {
+    "message": "Hide calls"
+  },
+  "agent_progress_status_running": {
+    "message": "running"
+  },
+  "agent_progress_status_thinking": {
+    "message": "thinking"
+  },
+  "agent_progress_status_ok": {
+    "message": "ok"
+  },
+  "agent_progress_status_failed": {
+    "message": "failed"
+  },
+  "agent_progress_status_cancelled": {
+    "message": "cancelled"
   }
 }

@@ -50,6 +50,8 @@ import Button from '../Button'
 import VCardComponent from './VCard'
 import { htmlToMessageText } from './htmlToMessageText'
 import { shouldShowCopyItem } from './messageContextMenuUtils'
+import AgentProgressMessageContent from './AgentProgressMessage'
+import { parseAgentProgressMessage } from './agentProgress'
 
 import {
   matchesLetterShortcut,
@@ -474,6 +476,10 @@ export default function Message(props: {
   const shouldRefocusMessageAfterExpand = useRef(false)
   const showFullMessageButtonRef = useRef<HTMLButtonElement>(null)
   const textToRender = expandedHtmlText ?? text
+  const parsedAgentProgress = useMemo(
+    () => (textToRender ? parseAgentProgressMessage(textToRender) : null),
+    [textToRender]
+  )
 
   const onShowFullMessage = useCallback(async () => {
     if (expandedHtmlText !== null || loadingExpandedHtmlText) {
@@ -848,10 +854,17 @@ export default function Message(props: {
   let content = (
     <div dir='auto' className='text'>
       {textToRender !== null ? (
-        <MessageBody
-          text={textToRender}
-          tabindexForInteractiveContents={tabindexForInteractiveContents}
-        />
+        parsedAgentProgress !== null ? (
+          <AgentProgressMessageContent
+            progress={parsedAgentProgress}
+            tabindexForInteractiveContents={tabindexForInteractiveContents}
+          />
+        ) : (
+          <MessageBody
+            text={textToRender}
+            tabindexForInteractiveContents={tabindexForInteractiveContents}
+          />
+        )
       ) : null}
     </div>
   )
