@@ -247,8 +247,14 @@ $info-text-max-width: 400px;
     background-color: transparent;
     padding-inline-start: 0;
     color: var(--colorPrimary);
+
     &:hover {
       cursor: pointer;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.75;
     }
   }
 

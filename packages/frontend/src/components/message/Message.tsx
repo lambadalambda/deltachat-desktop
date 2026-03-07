@@ -21,7 +21,6 @@ import {
   openMessageInfo,
   isMessageEditable,
   setQuoteInDraft,
-  openMessageHTML,
   confirmDeleteMessage,
   downloadFullMessage,
   openWebxdc,
@@ -49,6 +48,8 @@ import ShortcutMenu from '../ShortcutMenu'
 import InvalidUnencryptedMailDialog from '../dialogs/InvalidUnencryptedMail'
 import Button from '../Button'
 import VCardComponent from './VCard'
+import { htmlToMessageText } from './htmlToMessageText'
+import { shouldShowCopyItem } from './messageContextMenuUtils'
 
 import {
   matchesLetterShortcut,
@@ -252,6 +253,7 @@ function buildContextMenu(
   const textSelected: boolean = selectedText !== null && selectedText !== ''
 
   const isSavedMessage = message.savedMessageId !== null
+  const showCopyItem = shouldShowCopyItem(text, textSelected, email)
 
   /** Copy action, is one of the following, (in that order):
    *
@@ -374,7 +376,7 @@ function buildContextMenu(
         action: () => runtime.writeClipboardText(link),
       },
     // copy item (selection or all text)
-    text !== '' && copy_item,
+    showCopyItem && copy_item,
     // Copy image
     showCopyImage && {
       label: tx('menu_copy_image_to_clipboard'),
@@ -467,6 +469,36 @@ export default function Message(props: {
   const openViewProfileDialog = useOpenViewProfileDialog()
   const { jumpToMessage } = useMessage()
   const [messageWidth, setMessageWidth] = useState(0)
+  const [expandedHtmlText, setExpandedHtmlText] = useState<string | null>(null)
+  const [loadingExpandedHtmlText, setLoadingExpandedHtmlText] = useState(false)
+  const shouldRefocusMessageAfterExpand = useRef(false)
+  const showFullMessageButtonRef = useRef<HTMLButtonElement>(null)
+  const textToRender = expandedHtmlText ?? text
+
+  const onShowFullMessage = useCallback(async () => {
+    if (expandedHtmlText !== null || loadingExpandedHtmlText) {
+      return
+    }
+
+    shouldRefocusMessageAfterExpand.current =
+      document.activeElement === showFullMessageButtonRef.current
+
+    setLoadingExpandedHtmlText(true)
+    try {
+      const html = await BackendRemote.rpc.getMessageHtml(accountId, message.id)
+      if (html === null) {
+        log.error('show_full_message, message has no html content', {
+          messageId: message.id,
+        })
+        return
+      }
+      setExpandedHtmlText(htmlToMessageText(html))
+    } catch (error) {
+      log.error('show_full_message failed', { messageId: message.id, error })
+    } finally {
+      setLoadingExpandedHtmlText(false)
+    }
+  }, [accountId, expandedHtmlText, loadingExpandedHtmlText, message.id])
 
   const showContextMenu = useCallback(
     (
@@ -512,7 +544,7 @@ export default function Message(props: {
         {
           accountId,
           message,
-          text: text || undefined,
+          text: textToRender ?? undefined,
           conversationType,
           openDialog,
           privateReply,
@@ -540,7 +572,7 @@ export default function Message(props: {
       openDialog,
       privateReply,
       showReactionsBar,
-      text,
+      textToRender,
       jumpToMessage,
       tx,
     ]
@@ -668,6 +700,18 @@ export default function Message(props: {
     },
     onFocus: rovingTabindex.setAsActiveElement,
   }
+
+  useEffect(() => {
+    if (expandedHtmlText === null || !shouldRefocusMessageAfterExpand.current) {
+      return
+    }
+
+    shouldRefocusMessageAfterExpand.current = false
+    if (ref.current instanceof HTMLElement) {
+      ref.current.focus()
+    }
+  }, [expandedHtmlText])
+
   // When the message is not the active one
   // `rovingTabindex.tabIndex === -1`, we need to set `tabindex="-1"`
   // to all its interactive (otherwise "Tabbable to") elements,
@@ -803,9 +847,9 @@ export default function Message(props: {
 
   let content = (
     <div dir='auto' className='text'>
-      {text !== null ? (
+      {textToRender !== null ? (
         <MessageBody
-          text={text}
+          text={textToRender}
           tabindexForInteractiveContents={tabindexForInteractiveContents}
         />
       ) : null}
@@ -846,7 +890,7 @@ export default function Message(props: {
     message?.originalMsgId ||
     chat.isSelfTalk
 
-  const hasText = text !== null && text !== ''
+  const hasText = textToRender !== null && textToRender !== ''
   const fileMime = message.fileMime || null
   const isWithoutText = isMediaWithoutText(fileMime, hasText, message.viewType)
   const showAttachment = (message: T.Message) =>
@@ -868,7 +912,7 @@ export default function Message(props: {
           'type-sticker': viewType === 'Sticker',
           error: status === 'error',
           forwarded: message.isForwarded,
-          'has-html': hasHtml,
+          'has-html': hasHtml && expandedHtmlText === null,
         }
       )}
       id={message.id.toString()}
@@ -933,7 +977,7 @@ export default function Message(props: {
           )}
           {showAttachment(message) && (
             <Attachment
-              text={text || undefined}
+              text={textToRender || undefined}
               message={message}
               tabindexForInteractiveContents={tabindexForInteractiveContents}
             />
@@ -951,14 +995,18 @@ export default function Message(props: {
             ></VCardComponent>
           )}
           {content}
-          {hasHtml && (
+          {hasHtml && expandedHtmlText === null && (
             <button
               type='button'
-              onClick={openMessageHTML.bind(null, message.id)}
+              onClick={onShowFullMessage}
               className='show-html'
               tabIndex={tabindexForInteractiveContents}
+              disabled={loadingExpandedHtmlText}
+              ref={showFullMessageButtonRef}
             >
-              {tx('show_full_message')}
+              {loadingExpandedHtmlText
+                ? tx('downloading')
+                : tx('show_full_message')}
             </button>
           )}
           <footer
