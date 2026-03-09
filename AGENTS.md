@@ -16,6 +16,12 @@ This project includes the following workflow expectations for agent-driven work:
 - Do not mix unrelated changes in the same commit.
 - Write clear commit messages that explain intent.
 
+## Fork Change Tracking
+
+- Keep `FORK.md` updated for fork-specific behavior and workflow.
+- For every fork-only change, add a short entry with status and commit/issue link.
+- If a tracked change is upstreamed or removed, mark it as `retired`.
+
 ## Local Desktop Workflow
 
 - Prefer `mise` tasks for repeatable local desktop workflows.
