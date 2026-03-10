@@ -71,3 +71,7 @@ run = "open -a \"/Applications/DeltaChat.app\""
 description = "Build, package, install, sign and open DeltaChat"
 depends = ["desktop-open-mac"]
 run = "echo \"DeltaChat refreshed in /Applications\""
+
+[tasks.fixture-media-view]
+description = "Start browser target and open media fixture"
+run = "echo \"Open https://localhost:3000/fixtures/media-view.html\" && WEB_PASSWORD=${WEB_PASSWORD:-testpassword} COREPACK_ENABLE_STRICT=0 pnpm -w start:browser"

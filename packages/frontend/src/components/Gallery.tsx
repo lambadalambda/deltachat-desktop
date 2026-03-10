@@ -33,10 +33,16 @@ import {
 import InfiniteLoader from 'react-window-infinite-loader'
 import { T } from '@deltachat/jsonrpc-client'
 import { useTranslationWritingDirection } from '../hooks/useTranslationFunction'
+import {
+  GALLERY_TAB_ORDER,
+  getRecentTypeLabelKey,
+  getSortedRecentMediaIds,
+  MediaTabKey,
+  RECENT_MEDIA_LIMIT_PER_TYPE,
+  RECENT_MEDIA_REQUESTS,
+} from './galleryMediaUtils'
 
 const log = getLogger('renderer/Gallery')
-
-type MediaTabKey = 'webxdc_apps' | 'images' | 'video' | 'audio' | 'files'
 
 type GalleryElement = (
   props: GalleryAttachmentElementProps & {
@@ -50,6 +56,10 @@ const MediaTabs: Readonly<{
     element: GalleryElement
   }
 }> = {
+  recent: {
+    values: ['Gif', 'Image', 'Video', 'Audio', 'Voice', 'File', 'Webxdc'],
+    element: FileAttachmentRow,
+  },
   webxdc_apps: {
     values: ['Webxdc'],
     element: WebxdcAttachment,
@@ -118,14 +128,15 @@ export default class Gallery extends Component<
   tabListRef = createRef<HTMLUListElement>()
   galleryItemsRef = createRef<HTMLDivElement>()
   cleanup: Array<() => void> = []
+  requestSequence = 0
   scrollbarWidth = getCurrentDocumentVerticalScrollbarWidth()
   constructor(props: Props) {
     super(props)
 
     this.state = {
-      currentTab: 'webxdc_apps',
-      msgTypes: MediaTabs.webxdc_apps.values,
-      element: WebxdcAttachment,
+      currentTab: 'recent',
+      msgTypes: MediaTabs.recent.values,
+      element: FileAttachmentRow,
       mediaMessageIds: [],
       mediaLoadResult: {},
       loading: true,
@@ -138,9 +149,9 @@ export default class Gallery extends Component<
 
   reset() {
     this.setState({
-      currentTab: 'webxdc_apps',
-      msgTypes: MediaTabs.webxdc_apps.values,
-      element: WebxdcAttachment,
+      currentTab: 'recent',
+      msgTypes: MediaTabs.recent.values,
+      element: FileAttachmentRow,
       mediaMessageIds: [],
       mediaLoadResult: {},
       loading: true,
@@ -203,7 +214,7 @@ export default class Gallery extends Component<
     if (this.props.chatId !== prevProps.chatId) {
       // reset
       this.reset()
-      this.onSelect('images')
+      this.onSelect('recent')
     }
   }
 
@@ -211,14 +222,71 @@ export default class Gallery extends Component<
     if (!this.props.chatId) {
       throw new Error('chat id missing')
     }
+
     const msgTypes = MediaTabs[tab].values
     const newElement = MediaTabs[tab].element
     const accountId = selectedAccountId()
     const chatId = this.props.chatId !== 'all' ? this.props.chatId : null
-    this.setState({ loading: true })
+    const requestId = ++this.requestSequence
+    this.setState({
+      currentTab: tab,
+      msgTypes,
+      element: newElement,
+      mediaMessageIds: [],
+      mediaLoadResult: {},
+      loading: true,
+    })
+
+    if (tab === 'recent') {
+      Promise.all(
+        RECENT_MEDIA_REQUESTS.map(([viewType, additionalViewType]) =>
+          BackendRemote.rpc.getChatMedia(
+            accountId,
+            chatId,
+            viewType,
+            additionalViewType ?? null,
+            null
+          )
+        )
+      )
+        .then(async groupedMediaIds => {
+          const boundedGroupedMediaIds = groupedMediaIds.map(mediaIds =>
+            mediaIds.slice(-RECENT_MEDIA_LIMIT_PER_TYPE)
+          )
+          const uniqueMediaIds = [...new Set(boundedGroupedMediaIds.flat())]
+          const mediaLoadResult = await BackendRemote.rpc.getMessages(
+            accountId,
+            uniqueMediaIds
+          )
+          const sortedRecentIds = getSortedRecentMediaIds(
+            boundedGroupedMediaIds,
+            mediaLoadResult
+          )
+
+          if (requestId !== this.requestSequence) {
+            return
+          }
+
+          this.setState({
+            currentTab: tab,
+            msgTypes,
+            element: newElement,
+            mediaMessageIds: sortedRecentIds,
+            mediaLoadResult,
+            loading: false,
+          })
+        })
+        .catch(error => {
+          if (requestId === this.requestSequence) {
+            this.setState({ loading: false })
+          }
+          log.error(error)
+        })
+      return
+    }
 
     BackendRemote.rpc
-      .getChatMedia(accountId, chatId, msgTypes[0], msgTypes[1], null)
+      .getChatMedia(accountId, chatId, msgTypes[0], msgTypes[1] ?? null, null)
       .then(async media_ids => {
         const mediaLoadResult =
           tab !== 'files'
@@ -226,6 +294,11 @@ export default class Gallery extends Component<
               []
             : await BackendRemote.rpc.getMessages(accountId, media_ids)
         media_ids.reverse() // order newest up - if we need different ordering we need to do it in core
+
+        if (requestId !== this.requestSequence) {
+          return
+        }
+
         this.setState({
           currentTab: tab,
           msgTypes,
@@ -234,9 +307,13 @@ export default class Gallery extends Component<
           mediaLoadResult,
           loading: false,
         })
-        this.forceUpdate()
       })
-      .catch(log.error.bind(log))
+      .catch(error => {
+        if (requestId === this.requestSequence) {
+          this.setState({ loading: false })
+        }
+        log.error(error)
+      })
   }
 
   onChangeInput(ev: ChangeEvent<HTMLInputElement>) {
@@ -247,6 +324,8 @@ export default class Gallery extends Component<
     const allMedia = this.props.chatId === 'all'
     const tx = window.static_translate // static because dynamic isn't too important here
     switch (tab) {
+      case 'recent':
+        return tx('tab_all_media_empty_hint')
       case 'images':
         return allMedia
           ? tx('tab_all_media_empty_hint')
@@ -300,32 +379,37 @@ export default class Gallery extends Component<
     } = this.state
     const tx = window.static_translate // static because dynamic isn't too important here
     const emptyTabMessage = this.emptyTabMessage(currentTab)
+    const isListTab = currentTab === 'files' || currentTab === 'recent'
 
     const filteredMediaMessageIds =
       currentTab !== 'files'
-        ? []
+        ? mediaMessageIds
         : mediaMessageIds.filter(id => {
             const result = mediaLoadResult[id]
             return (
-              result.kind === 'message' &&
+              result?.kind === 'message' &&
               result.fileName
                 ?.toLowerCase()
                 .indexOf(queryText.toLowerCase()) !== -1
             )
           })
 
-    const showDateHeader =
-      currentTab !== 'files' && currentTab !== 'webxdc_apps'
+    const showDateHeader = !isListTab && currentTab !== 'webxdc_apps'
 
     return (
       <div className='media-view'>
-        <ul ref={this.tabListRef} className='tab-list .modifier' role='tablist'>
+        <ul
+          ref={this.tabListRef}
+          className={`tab-list ${
+            showDateHeader ? 'has-date-header' : 'without-date-header'
+          }`}
+          role='tablist'
+        >
           <RovingTabindexProvider
             wrapperElementRef={this.tabListRef}
             direction='horizontal'
           >
-            {Object.keys(MediaTabs).map(realId => {
-              const tabId = realId as MediaTabKey
+            {GALLERY_TAB_ORDER.map(tabId => {
               return (
                 <li key={tabId}>
                   <GalleryTab
@@ -341,10 +425,10 @@ export default class Gallery extends Component<
           {showDateHeader && (
             <div className='tab-item big-date' ref={this.dateHeader}></div>
           )}
-          {currentTab === 'files' && (
-            <>
-              <div style={{ flexGrow: 1 }}></div>
-              <div className='searchbar'>
+            {currentTab === 'files' && (
+              <>
+                <div style={{ flexGrow: 1 }}></div>
+                <div className='searchbar'>
                 <input
                   type='search'
                   placeholder={tx('search_files')}
@@ -379,7 +463,7 @@ export default class Gallery extends Component<
               </div>
             )}
 
-            {currentTab === 'files' && (
+            {isListTab && (
               <>
                 <AutoSizer disableWidth>
                   {({ height }) => (
@@ -392,12 +476,15 @@ export default class Gallery extends Component<
                         height={height}
                         mediaLoadResult={mediaLoadResult}
                         mediaMessageIds={filteredMediaMessageIds}
-                        queryText={queryText}
+                        queryText={currentTab === 'files' ? queryText : ''}
+                        showTypeLabel={currentTab === 'recent'}
+                        typeAwareOpen={currentTab === 'recent'}
+                        openFullscreenMedia={this.openFullscreenMedia.bind(this)}
                       ></FileTable>
                     </RovingTabindexProvider>
                   )}
                 </AutoSizer>
-                {filteredMediaMessageIds.length === 0 && (
+                {currentTab === 'files' && filteredMediaMessageIds.length === 0 && (
                   <div className='empty-screen'>
                     <p className='no-media-message'>
                       {tx('search_no_result_for_x', queryText)}
@@ -407,7 +494,7 @@ export default class Gallery extends Component<
               </>
             )}
 
-            {currentTab !== 'files' && (
+            {!isListTab && (
               <GridGallery
                 currentTab={currentTab}
                 element={this.state.element}
@@ -628,6 +715,7 @@ function GalleryTab(props: {
   tx: getMessageFunction
 }) {
   const { tabId, isSelected, tx, onClick } = props
+  const labelKey = tabId === 'recent' ? 'emoji_recent' : tabId
 
   const ref = useRef<HTMLButtonElement>(null)
   const rovingTabindex = useRovingTabindex(ref)
@@ -648,7 +736,7 @@ function GalleryTab(props: {
       onFocus={rovingTabindex.setAsActiveElement}
       onKeyDown={rovingTabindex.onKeydown}
     >
-      {tx(tabId)}
+      {tx(labelKey)}
     </button>
   )
 }
@@ -659,12 +747,18 @@ function FileTable({
   mediaMessageIds,
   mediaLoadResult,
   queryText,
+  showTypeLabel,
+  typeAwareOpen,
+  openFullscreenMedia,
 }: {
   width: number | string
   height: number
   mediaMessageIds: number[]
   mediaLoadResult: Record<number, Type.MessageLoadResult>
   queryText: string
+  showTypeLabel: boolean
+  typeAwareOpen: boolean
+  openFullscreenMedia: (message: Type.Message) => void
 }) {
   const writingDirection = useTranslationWritingDirection()
   return (
@@ -680,6 +774,9 @@ function FileTable({
         mediaMessageIds,
         mediaLoadResult,
         queryText,
+        showTypeLabel,
+        typeAwareOpen,
+        openFullscreenMedia,
       }}
       direction={writingDirection}
       itemKey={(index, data) => data.mediaMessageIds[index]}
@@ -700,20 +797,39 @@ function FileAttachmentRowWrapper({
     mediaMessageIds: number[]
     mediaLoadResult: Record<number, Type.MessageLoadResult>
     queryText: string
+    showTypeLabel: boolean
+    typeAwareOpen: boolean
+    openFullscreenMedia: (message: Type.Message) => void
   }
 }) {
-  const { mediaMessageIds, mediaLoadResult, queryText } = data
+  const {
+    mediaMessageIds,
+    mediaLoadResult,
+    queryText,
+    showTypeLabel,
+    typeAwareOpen,
+    openFullscreenMedia,
+  } = data
   const msgId = mediaMessageIds[index]
   const message = mediaLoadResult[msgId]
   if (!message) {
     return null
   }
+
+  const typeLabel =
+    showTypeLabel && message.kind === 'message'
+      ? window.static_translate(getRecentTypeLabelKey(message.viewType))
+      : undefined
+
   return (
     <li style={style} className='item'>
       <FileAttachmentRow
         messageId={msgId}
         loadResult={message}
         queryText={queryText}
+        typeLabel={typeLabel}
+        typeAwareOpen={typeAwareOpen}
+        openFullscreenMedia={openFullscreenMedia}
       />
     </li>
   )

@@ -33,3 +33,8 @@ This file tracks behavior and workflow that intentionally differs in
   - issue: https://github.com/lambadalambda/deltachat-desktop/issues/2
 - `planned` UI/composer: emoji autocomplete from `:query` in the composer.
   - issue: https://github.com/lambadalambda/deltachat-desktop/issues/3
+
+### In-progress
+
+- `in-progress` workflow: browser fixture page for quick visual checks of Apps/Media layout.
+  - issue: https://github.com/lambadalambda/deltachat-desktop/issues/2

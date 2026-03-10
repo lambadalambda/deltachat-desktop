@@ -45,6 +45,10 @@ $tab-height: 46px;
         }
       }
     }
+
+    &.without-date-header {
+      justify-content: flex-start;
+    }
   }
 
   & .gallery {
@@ -79,6 +83,28 @@ $tab-height: 46px;
       color: var(--textPrimary);
       outline: none;
       margin-inline-end: 20px;
+    }
+  }
+
+  #gallery-tabpanel-recent {
+    .media-attachment-generic {
+      padding-inline: 8px;
+
+      & > .name {
+        flex-grow: 0;
+        flex-shrink: 1;
+        max-width: 55%;
+        min-width: 120px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        word-break: normal;
+      }
+
+      & > .size {
+        width: 80px;
+        margin-inline-start: auto;
+      }
     }
   }
 }

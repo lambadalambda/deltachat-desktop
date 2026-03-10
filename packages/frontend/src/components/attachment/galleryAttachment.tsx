@@ -34,6 +34,7 @@ import { useRovingTabindex } from '../../contexts/RovingTabindex'
 import ConfirmDeleteMessageDialog from '../dialogs/ConfirmDeleteMessage'
 import { BackendRemote } from '../../backend-com'
 import { useRpcFetch } from '../../hooks/useFetch'
+import { getRecentOpenBehavior, getRecentPreviewKind } from '../galleryMediaUtils'
 
 const log = getLogger('mediaAttachment')
 
@@ -483,7 +484,15 @@ export function FileAttachmentRow({
   messageId,
   loadResult,
   queryText,
-}: GalleryAttachmentElementProps & { queryText?: string }) {
+  typeLabel,
+  typeAwareOpen,
+  openFullscreenMedia,
+}: GalleryAttachmentElementProps & {
+  queryText?: string
+  typeLabel?: string
+  typeAwareOpen?: boolean
+  openFullscreenMedia?: (message: T.Message) => void
+}) {
   const { openDialog } = useDialog()
   const tx = useTranslationFunction()
   const contextMenu = useContext(ContextMenuContext)
@@ -539,6 +548,37 @@ export function FileAttachmentRow({
     const { fileName, fileBytes, fileMime, file, timestamp } = message
 
     const extension = getExtension(message)
+    const previewKind = typeAwareOpen
+      ? getRecentPreviewKind(message.viewType)
+      : 'file'
+
+    const canShowMediaPreview =
+      previewKind === 'media' &&
+      file != null &&
+      (message.viewType === 'Video' ? isVideo(fileMime) : isImage(fileMime))
+
+    const canShowWebxdcPreview = previewKind === 'webxdc'
+
+    const openTypeAware = () => {
+      const behavior = getRecentOpenBehavior(message.viewType)
+
+      if (behavior === 'webxdc') {
+        void openWebxdc(message)
+        return
+      }
+
+      if (behavior === 'fullscreen' && openFullscreenMedia) {
+        const hasSupportedFormat =
+          message.viewType === 'Video' ? isVideo(fileMime) : isImage(fileMime)
+        if (file && hasSupportedFormat) {
+          openFullscreenMedia(message)
+          return
+        }
+      }
+
+      openInShell()
+    }
+
     return (
       <button
         type='button'
@@ -546,24 +586,60 @@ export function FileAttachmentRow({
         className={'media-attachment-generic ' + rovingTabindex.className}
         onClick={ev => {
           ev.stopPropagation()
+          if (typeAwareOpen) {
+            openTypeAware()
+            return
+          }
+
           openInShell()
         }}
         onContextMenu={openContextMenu}
         aria-haspopup='menu'
         {...rovingTabindexProps}
       >
-        <div
-          className='file-icon'
-          draggable='true'
-          onDragStart={dragAttachmentOut.bind(null, file)}
-          title={fileMime || 'null'}
-        >
-          {extension ? (
+          <div
+            className={`file-icon ${
+              canShowMediaPreview || canShowWebxdcPreview ? 'recent-preview' : ''
+            } ${canShowWebxdcPreview ? 'webxdc-preview' : ''}`}
+            draggable='true'
+            onDragStart={dragAttachmentOut.bind(null, file)}
+            title={fileMime || 'null'}
+          >
+          {canShowMediaPreview ? (
+            message.viewType === 'Video' ? (
+              <>
+                <video
+                  className='preview-media'
+                  src={runtime.transformBlobURL(file || '')}
+                  preload='metadata'
+                  muted
+                />
+                <span className='preview-play-btn'>
+                  <span className='preview-play-btn-icon' />
+                </span>
+              </>
+            ) : (
+              <img
+                className='preview-media'
+                src={runtime.transformBlobURL(file || '')}
+                loading='lazy'
+                alt=''
+              />
+            )
+          ) : canShowWebxdcPreview ? (
+            <img
+              className='preview-webxdc'
+              src={runtime.getWebxdcIconURL(selectedAccountId(), message.id)}
+              alt=''
+            />
+          ) : extension ? (
             <div className='file-extension'>
               {fileMime === 'application/octet-stream' ? '' : extension}
             </div>
           ) : null}
         </div>
+
+        {typeLabel && <span className='type-badge'>{typeLabel}</span>}
 
         <div className='name'>
           {queryText && fileName

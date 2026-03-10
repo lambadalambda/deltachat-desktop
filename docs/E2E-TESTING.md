@@ -34,6 +34,20 @@ pnpm -w e2e --ui
 
 for [UI mode](https://playwright.dev/docs/test-ui-mode)
 
+## Visual fixture page
+
+If you just want to inspect UI quickly with fake content (no real account setup), run:
+
+```sh
+mise run fixture-media-view
+```
+
+Then open:
+
+`https://localhost:3000/fixtures/media-view.html`
+
+This fixture renders the real Gallery components against fake backend data, which is useful for quick visual checks of Apps/Media ordering and spacing.
+
 ```sh
 pnpm -w e2e basic
 ```

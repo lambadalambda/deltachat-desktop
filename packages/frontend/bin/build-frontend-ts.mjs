@@ -14,7 +14,7 @@ import { compile } from 'sass'
  * @returns {esbuild.BuildOptions}
  */
 function config(options) {
-  const { isProduction, isMinify, isWatch } = options
+  const { isProduction, isMinify, isWatch, entryPoints, outfile } = options
 
   const plugins = [sassPlugin, inlineWorkerPlugin()]
   if (isWatch || isProduction) {
@@ -24,11 +24,11 @@ function config(options) {
   }
 
   return {
-    entryPoints: ['src/main.tsx'],
+    entryPoints,
     bundle: true,
     minify: isMinify,
     sourcemap: true,
-    outfile: 'html-dist/bundle.js',
+    outfile,
     platform: 'browser',
     define: {
       'process.env.NODE_ENV': isProduction ? '"production"' : '"development"',
@@ -130,22 +130,37 @@ const reporterPlugin = {
  * Start watching for all files with `esbuild`, on change of any watched
  * file this will trigger a build.
  */
-async function watch(options) {
-  const context = await esbuild.context(options)
-  await context.watch()
+async function watch(optionsList) {
+  const contexts = await Promise.all(
+    optionsList.map(options => esbuild.context(options))
+  )
+  await Promise.all(contexts.map(context => context.watch()))
 }
 
 async function main(isWatch = false, isProduction = false, isMinify = false) {
-  const options = config({
+  const sharedBuildOptions = {
     isProduction: !isWatch && isProduction,
     isMinify: (!isWatch && isMinify) || isProduction,
     isWatch,
-  })
+  }
+
+  const buildOptions = [
+    config({
+      ...sharedBuildOptions,
+      entryPoints: ['src/main.tsx'],
+      outfile: 'html-dist/bundle.js',
+    }),
+    config({
+      ...sharedBuildOptions,
+      entryPoints: ['src/fixtures/media-view.ts'],
+      outfile: 'html-dist/fixtures/media-view.js',
+    }),
+  ]
 
   if (isWatch) {
-    await watch(options)
+    await watch(buildOptions)
   } else {
-    await esbuild.build(options)
+    await Promise.all(buildOptions.map(options => esbuild.build(options)))
   }
 }
 

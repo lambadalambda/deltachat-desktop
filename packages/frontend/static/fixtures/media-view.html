@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Delta Chat Fixture: Apps and Media</title>
+    <link rel="icon" type="image/x-icon" href="/images/deltachat.ico" />
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <link rel="stylesheet" href="/main.css" />
+    <link rel="stylesheet" href="/bundle.css" />
+    <link rel="stylesheet" href="/fallback-theme.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        background: var(--bgPrimary, #111);
+        color: var(--textPrimary, #fff);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+
+      .fixture-shell {
+        margin: 0 auto;
+        width: min(1200px, 100%);
+        height: calc(100vh - 40px);
+        border: 1px solid var(--messageBorderAndDate, #666);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .fixture-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--messageBorderAndDate, #666);
+        background: var(--bgSecondary, #1a1a1a);
+      }
+
+      .fixture-title {
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .fixture-note {
+        color: var(--summary-text-color, #b3b3b3);
+        font-size: 13px;
+      }
+
+      .fixture-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .fixture-select {
+        border: 1px solid var(--messageBorderAndDate, #666);
+        background: transparent;
+        color: inherit;
+        padding: 6px 8px;
+        border-radius: 6px;
+      }
+
+      .fixture-content {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .fixture-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .fixture-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .fixture-grid > .item {
+        min-height: 140px;
+      }
+
+      .fixture-grid.apps {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      }
+
+      .fixture-grid.apps > .item {
+        min-height: 64px;
+      }
+
+      .fixture-empty {
+        display: grid;
+        place-items: center;
+        height: 100%;
+        color: var(--summary-text-color, #b3b3b3);
+      }
+
+      .fixture-type {
+        color: var(--summary-text-color, #b3b3b3);
+        margin-inline-end: 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .fixture-content > .media-view {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/javascript" src="/avoid-eval.js"></script>
+    <script type="text/javascript" src="/browser-source-map-support.js"></script>
+    <script type="text/javascript" src="/fix-missing-vars.js"></script>
+    <script type="module" src="/fixtures/media-view.js"></script>
+  </body>
+</html>

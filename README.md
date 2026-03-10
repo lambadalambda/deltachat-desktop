@@ -27,11 +27,11 @@
 
 - [Contribution Guidelines](./CONTRIBUTING.md)
 - [Fork-specific changes](./FORK.md)
+- [E2E and fixture testing](./docs/E2E-TESTING.md)
 - [Logging](./docs/LOGGING.md)
 - [Documentation for Developers](./docs/DEVELOPMENT.md)
 - [Styling Guidelines](./docs/STYLES.md)
 - [How to update core](./docs/UPDATE_CORE.md)
-- [How to do end to end testing](./docs/E2E-TESTING.md)
 - [How to do a release](./RELEASE.md)
 
 ## Table of Contents

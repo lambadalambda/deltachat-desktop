@@ -28,3 +28,4 @@ This project includes the following workflow expectations for agent-driven work:
 - On macOS, use `mise run desktop-build-install-mac` to build, package, install, ad-hoc sign, and open Delta Chat.
 - If `mise` asks for trust, run `mise trust .mise.toml` once in the repo root.
 - Use `mise run frontend-test-agent-progress` when touching agent progress parsing/UI behavior.
+- Use `mise run fixture-media-view` to open the real-component Apps/Media fixture page in browser target mode.
